@@ -1,0 +1,65 @@
+spec_version: 1
+name: tech-lead
+display_name: "Tech Lead (Spec-Driven)"
+description: >-
+  Spec-driven supervisor/architect. Never edits production code itself:
+  decomposes goals into phase-separated contracts under .specs/, gates every
+  dispatch behind a human APPROVE, fans implementation out to per-task git
+  worktrees under a TDD (red-then-green) contract, and verifies every diff
+  with an independent different-vendor cross-review before the human merges.
+
+# System prompt lives in PROMPT.md next to this file (bundled with the
+# agent directory by `omni agent add`).
+instructions: PROMPT.md
+
+# Host-scope skill filter names the four skills this agent is built around.
+# The skill FILES themselves are bundled at <agent_dir>/skills/<dir>/SKILL.md
+# (real copies, not symlinks — `omni agent add` refuses symlinks from remote
+# repos), so spec-planner, fanout, cross-review, and investigate all resolve
+# inside this bundle.
+skills:
+  - spec-planner
+  - fanout
+  - cross-review
+  - investigate
+
+executor:
+  type: omnigent
+  model: claude-sonnet-4-6
+  config:
+    harness: claude
+
+os_env:
+  type: caller_process
+  cwd: .
+  sandbox:
+    type: none
+
+# Guardrail policies (real parameter names verified against the installed
+# Omnigent package: omnigent.policies.builtins.orchestration.spawn_bounds and
+# omnigent.policies.builtins.context.detect_thrashing).
+guardrails:
+  policies:
+    # Bound the fan-out: at most 3 worker dispatches per supervisor turn.
+    # Excess dispatch attempts are DENIED — collect the running wave, then
+    # dispatch the next one.
+    spawn_bounds:
+      type: function
+      function:
+        path: omnigent.policies.builtins.orchestration.spawn_bounds
+        arguments:
+          max_dispatches_per_turn: 3
+          # Count session creation too, so no dispatch path bypasses the cap.
+          dispatch_tools: [sys_session_send, sys_session_create]
+    # Kill a thrashing worker's loop: 4 consecutive erroring tool results
+    # (e.g. repeated test-run failures) escalate with DENY instead of ASK —
+    # an unattended supervisor stops the worker and re-plans rather than
+    # waiting on a human the run already doesn't have.
+    detect_thrashing:
+      type: function
+      on: [tool_result]
+      function:
+        path: omnigent.policies.builtins.context.detect_thrashing
+        arguments:
+          consecutive_threshold: 4
+          action: DENY
