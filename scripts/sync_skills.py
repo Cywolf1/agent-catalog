@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Sync the canonical spec-planner skill into the tech-lead agent bundle.
+"""Sync the canonical skills into the tech-lead agent bundle.
 
-`omni agent add` uploads ONLY the agent directory, so the canonical
-repo-root skill at skills/spec-planner/ must exist as real files (not
-symlinks) under agents/tech-lead/skills/spec-planner/ for the skill to
-install with the agent. This script copies the canonical tree over the
-bundled tree; `--check` verifies they are identical without writing.
+`omni agent add` uploads ONLY the agent directory, so each canonical
+repo-root skill at skills/<name>/ must exist as real files (not symlinks)
+under agents/tech-lead/skills/<name>/ for the skill to install with the
+agent. This script copies every canonical tree over its bundled tree;
+`--check` verifies they are identical without writing.
+
+spec-planner is authored here; fanout, cross-review, and investigate are
+verbatim copies of Omnigent's shipped polly example skills
+(omnigent/resources/examples/polly/skills/).
 
 Usage:
     python3 scripts/sync_skills.py          # copy canonical -> bundled
@@ -25,8 +29,9 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SRC = REPO_ROOT / "skills" / "spec-planner"
-DST = REPO_ROOT / "agents" / "tech-lead" / "skills" / "spec-planner"
+SRC_ROOT = REPO_ROOT / "skills"
+DST_ROOT = REPO_ROOT / "agents" / "tech-lead" / "skills"
+SKILL_NAMES = ("spec-planner", "fanout", "cross-review", "investigate")
 
 SKIP_SUFFIXES = {".pyc", ".pyo"}
 SKIP_DIRS = {"__pycache__"}
@@ -51,49 +56,58 @@ def _relative_files(root):
 def check():
     # type: () -> int
     """Compare canonical and bundled trees. Returns the process exit code."""
-    if not SRC.is_dir():
-        print(f"error: canonical skill dir missing: {SRC}", file=sys.stderr)
-        return 2
-    if not DST.is_dir():
-        print(f"error: bundled skill dir missing: {DST}", file=sys.stderr)
-        return 1
-
-    src_files = _relative_files(SRC)
-    dst_files = _relative_files(DST)
     problems = []  # type: list[str]
+    total = 0
+    for name in SKILL_NAMES:
+        src = SRC_ROOT / name
+        dst = DST_ROOT / name
+        if not src.is_dir():
+            print(f"error: canonical skill dir missing: {src}", file=sys.stderr)
+            return 2
+        if not dst.is_dir():
+            problems.append(f"missing in bundle: agents/tech-lead/skills/{name}/")
+            continue
 
-    for rel in sorted(src_files - dst_files):
-        problems.append(f"missing in bundle: agents/tech-lead/skills/spec-planner/{rel}")
-    for rel in sorted(dst_files - src_files):
-        problems.append(f"extra in bundle: agents/tech-lead/skills/spec-planner/{rel}")
-    for rel in sorted(src_files & dst_files):
-        if not filecmp.cmp(SRC / rel, DST / rel, shallow=False):
-            problems.append(f"content differs: agents/tech-lead/skills/spec-planner/{rel}")
+        src_files = _relative_files(src)
+        dst_files = _relative_files(dst)
+        total += len(src_files)
+
+        for rel in sorted(src_files - dst_files):
+            problems.append(f"missing in bundle: agents/tech-lead/skills/{name}/{rel}")
+        for rel in sorted(dst_files - src_files):
+            problems.append(f"extra in bundle: agents/tech-lead/skills/{name}/{rel}")
+        for rel in sorted(src_files & dst_files):
+            if not filecmp.cmp(src / rel, dst / rel, shallow=False):
+                problems.append(f"content differs: agents/tech-lead/skills/{name}/{rel}")
 
     if problems:
         for problem in problems:
             print(problem, file=sys.stderr)
         print(
-            "FAILED: bundled skill is out of sync; run "
+            "FAILED: bundled skills are out of sync; run "
             "`python3 scripts/sync_skills.py` to refresh it.",
             file=sys.stderr,
         )
         return 1
 
-    print(f"OK: {len(src_files)} file(s) in sync.")
+    print(f"OK: {total} file(s) in sync across {len(SKILL_NAMES)} skill(s).")
     return 0
 
 
 def sync():
     # type: () -> int
-    """Copy the canonical tree over the bundled tree. Returns the exit code."""
-    if not SRC.is_dir():
-        print(f"error: canonical skill dir missing: {SRC}", file=sys.stderr)
-        return 2
-    DST.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(SRC, DST, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*SKIP_DIRS, "*.pyc", "*.pyo"))
-    copied = len(_relative_files(DST))
-    print(f"OK: synced {copied} file(s) into agents/tech-lead/skills/spec-planner/.")
+    """Copy the canonical trees over the bundled trees. Returns the exit code."""
+    for name in SKILL_NAMES:
+        if not (SRC_ROOT / name).is_dir():
+            print(f"error: canonical skill dir missing: {SRC_ROOT / name}", file=sys.stderr)
+            return 2
+    copied = 0
+    for name in SKILL_NAMES:
+        dst = DST_ROOT / name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(SRC_ROOT / name, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*SKIP_DIRS, "*.pyc", "*.pyo"))
+        copied += len(_relative_files(dst))
+    print(f"OK: synced {copied} file(s) into agents/tech-lead/skills/.")
     return 0
 
 

@@ -1,60 +1,153 @@
 spec_version: 1
 name: tech-lead
+# Not read by omnigent.spec.parser (AgentSpec has no display_name field); kept
+# as the human-facing label for this catalog.
 display_name: "Tech Lead (Spec-Driven)"
 description: >-
-  Spec-driven supervisor/architect. Never edits production code itself:
-  decomposes goals into phase-separated contracts under .specs/, gates every
-  dispatch behind a human APPROVE, fans implementation out to per-task git
-  worktrees under a TDD (red-then-green) contract, and verifies every diff
-  with an independent different-vendor cross-review before the human merges.
+  A spec-driven coding orchestrator derived from Omnigent's polly. It turns
+  your goal into phased .specs/feat-*.md contracts with a dependency DAG,
+  waits for your explicit APPROVE, then hands one spec per worktree to its
+  Claude Code, Codex, OpenCode, Cursor, Hermes, Pi, and Antigravity
+  sub-agents under a test-first (red-then-green) contract. Every diff is
+  checked by an independent different-vendor reviewer against its spec, and
+  you merge the PRs. It writes no code itself.
 
-# System prompt lives in PROMPT.md next to this file (bundled with the
-# agent directory by `omni agent add`).
+# Beyond the declared sub-agents (tools.agents below), tech-lead may also
+# spawn child sessions it defines itself: spawn: true registers
+# sys_session_create, so it can launch an existing agent by id or author a
+# custom agent config and launch it via config_path.
+spawn: true
+
+# System prompt lives in PROMPT.md next to this file. The parser reads a
+# single-line `instructions:` value as a bundle-relative file when one exists
+# (omnigent.spec.parser._resolve_instructions).
 instructions: PROMPT.md
 
-# Host-scope skill filter names the four skills this agent is built around.
-# The skill FILES themselves are bundled at <agent_dir>/skills/<dir>/SKILL.md
-# (real copies, not symlinks — `omni agent add` refuses symlinks from remote
-# repos), so spec-planner, fanout, cross-review, and investigate all resolve
-# inside this bundle.
+# Bundled skills: real copies at <agent_dir>/skills/<dir>/SKILL.md (not
+# symlinks — `omni agent add` refuses them). Canonical sources live at the
+# repo-root skills/ and are kept in lockstep by scripts/sync_skills.py.
 skills:
   - spec-planner
   - fanout
   - cross-review
   - investigate
 
+# Orchestrator "brain": Claude Agent SDK, as polly. tech-lead writes no code
+# itself — it delegates ALL coding work (investigation, implementation,
+# review) to the sub-agents under agents/<dir>/. Unlike polly the brain model
+# is pinned; the claude-sdk harness passes it to the configured provider.
 executor:
   type: omnigent
   model: claude-sonnet-4-6
+  context_window: 1000000
   config:
-    harness: claude
+    harness: claude-sdk
+    # A pinned brain also pins the family its workers are routed within, which
+    # strands the codex / pi sub-agents. Route the brain instead.
+    smart_routing_harness: auto
 
+async: true
+cancellable: true
+timers: true
+
+# tech-lead runs unsandboxed: it only orchestrates (git, specs, registry,
+# gates) and dispatches sub-agents. The coding sub-agents run in their own
+# worktrees.
 os_env:
   type: caller_process
   cwd: .
   sandbox:
     type: none
 
-# Guardrail policies (real parameter names verified against the installed
-# Omnigent package: omnigent.policies.builtins.orchestration.spawn_bounds and
-# omnigent.policies.builtins.context.detect_thrashing).
+# Generic shell terminals for long-running processes (dev servers, watchers, log
+# tails) and ad-hoc shell when sys_os_shell's blocking model doesn't fit. NOT
+# for launching coding agents / sub-agents — those go through sys_session_send.
+# bash and zsh are both offered; the "+ New shell" affordance picks between them.
+terminals:
+  shell:
+    command: bash
+    allow_cwd_override: true
+    os_env:
+      type: caller_process
+      cwd: .
+      sandbox:
+        type: none
+  zsh:
+    command: zsh
+    allow_cwd_override: true
+    os_env:
+      type: caller_process
+      cwd: .
+      sandbox:
+        type: none
+
+tools:
+  # Coding sub-agents — see agents/<dir>/. sys_session_send's `agent` enum is
+  # built from these bundled children. claude_code, codex, opencode, cursor,
+  # hermes, and agy are real CLI coding harnesses; pi is a headless
+  # multi-model worker. Each implements, reviews (cross-vendor), and explores.
+  agents:
+    - claude_code
+    - codex
+    - opencode
+    - cursor
+    - hermes
+    - agy
+    - pi
+
+# Mechanism-layer enforcement — runner-side tool gate, no server change.
 guardrails:
+  # Day-long approval window — an ASK (including the human gate below) should
+  # outlive a human stepping away.
+  ask_timeout: 86400
   policies:
-    # Bound the fan-out: at most 3 worker dispatches per supervisor turn.
-    # Excess dispatch attempts are DENIED — collect the running wave, then
-    # dispatch the next one.
+    blast_radius:
+      type: function
+      function:
+        path: omnigent.inner.nessie.policies.blast_radius
+        arguments:
+          # Orchestrator runs unattended; don't ASK on push/merge/deploy. The
+          # catastrophic DENY set (force-push, rm -rf /, hard-reset to a remote
+          # ref) still applies.
+          gate_pushes: false
     spawn_bounds:
       type: function
       function:
-        path: omnigent.policies.builtins.orchestration.spawn_bounds
+        path: omnigent.inner.nessie.policies.spawn_bounds
         arguments:
+          # At most 3 dispatches per turn; larger plans run in waves.
           max_dispatches_per_turn: 3
-          # Count session creation too, so no dispatch path bypasses the cap.
+          # sys_session_create counts too: with spawn: true tech-lead can
+          # launch self-defined children, and an uncounted create would
+          # bypass the per-turn fan-out cap.
           dispatch_tools: [sys_session_send, sys_session_create]
-    # Kill a thrashing worker's loop: 4 consecutive erroring tool results
-    # (e.g. repeated test-run failures) escalate with DENY instead of ASK —
-    # an unattended supervisor stops the worker and re-plans rather than
-    # waiting on a human the run already doesn't have.
+    headless_subagent_purpose_guard:
+      type: function
+      function:
+        path: omnigent.inner.nessie.policies.headless_subagent_purpose_guard
+        arguments:
+          allowed_purposes: [implement, review, explore, search]
+    # Human gate, enforced by the runner: every IMPLEMENT dispatch raises a
+    # native approval card (ASK) the human must accept before the worker
+    # starts. Review / explore / search dispatches pass through.
+    human_gate_implement:
+      type: function
+      on: [tool_call]
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: >-
+            event.type == "tool_call" && event.data.name == "sys_session_send"
+            && has(event.data.arguments.args)
+            && has(event.data.arguments.args.purpose)
+            && event.data.arguments.args.purpose == "implement"
+            ? {"result": "ASK"} : {}
+          reason: >-
+            tech-lead human gate: approve this IMPLEMENT dispatch only if you
+            APPROVED the spec named in its input (status: ready). Deny to keep
+            the spec parked.
+    # Stop a thrashing loop: 4 consecutive erroring tool results escalate with
+    # DENY instead of ASK, so an unattended run re-plans rather than looping.
     detect_thrashing:
       type: function
       on: [tool_result]

@@ -45,6 +45,20 @@ REQUIRED_FILES = (
 
 REQUIRED_SKILLS = ("spec-planner", "fanout", "cross-review", "investigate")
 
+# Declared sub-agents, in polly's order. ``sys_session_send``'s ``agent`` enum
+# is built from the bundle's ``agents/<dir>/config.yaml`` children, so each
+# name here must also be a real worker config.
+WORKERS = ("claude_code", "codex", "opencode", "cursor", "hermes", "agy", "pi")
+WORKER_HARNESSES = {
+    "claude_code": "claude-native",
+    "codex": "codex-native",
+    "opencode": "opencode-native",
+    "cursor": "cursor-native",
+    "hermes": "hermes-native",
+    "agy": "antigravity-native",
+    "pi": "pi",
+}
+
 
 def _parse_minimal_yaml(text):
     # type: (str) -> dict
@@ -146,8 +160,46 @@ def test_config_yaml_required_fields():
     assert config["instructions"] == "PROMPT.md"
     executor = config["executor"]
     assert executor["type"] == "omnigent"
-    assert executor["config"]["harness"] == "claude"
+    assert executor["config"]["harness"] == "claude-sdk"
     assert executor["model"] == "claude-sonnet-4-6"
+
+
+def test_config_yaml_orchestrator_flags():
+    config = _load_config()
+    # spawn registers sys_session_create; async registers sys_read_inbox and
+    # friends; cancellable/timers mirror polly's orchestrator surface.
+    for flag in ("spawn", "async", "cancellable", "timers"):
+        assert config.get(flag) is True, "config.yaml %s must be true" % flag
+
+
+def test_config_yaml_declares_seven_workers():
+    agents = _load_config()["tools"]["agents"]
+    assert list(agents) == list(WORKERS)
+
+
+def test_worker_configs_exist_and_parse():
+    for name in WORKERS:
+        path = AGENT_DIR / "agents" / name / "config.yaml"
+        assert path.is_file() and not path.is_symlink(), path
+        worker = _load_yaml(path)
+        assert worker["spec_version"] == 1, path
+        assert worker["name"] == name, path
+        assert isinstance(worker["description"], str) and worker["description"].strip()
+        assert worker["executor"]["type"] == "omnigent", path
+        assert worker["executor"]["config"]["harness"] == WORKER_HARNESSES[name], path
+        prompt = worker["prompt"]
+        assert "tech-lead" in prompt, "%s prompt must name its dispatcher" % path
+        assert "polly" not in prompt, "%s prompt still names polly" % path
+        for token in (".specs/feat-", "Gherkin", "RED", "GREEN", "allowed_paths",
+                      "forbidden_paths", "Reserved Anti-Scope", "gh pr create"):
+            assert token in prompt, "%s prompt must mention %r" % (path, token)
+        blast = worker["guardrails"]["policies"]["blast_radius"]["function"]
+        assert blast["arguments"]["gate_pushes"] is False, path
+
+
+def test_worker_dirs_match_declared_workers():
+    dirs = sorted(p.name for p in (AGENT_DIR / "agents").iterdir() if p.is_dir())
+    assert dirs == sorted(WORKERS)
 
 
 def test_config_yaml_declares_required_skills():
@@ -157,16 +209,30 @@ def test_config_yaml_declares_required_skills():
 
 
 def test_config_yaml_policies():
-    policies = _load_config()["guardrails"]["policies"]
+    guardrails = _load_config()["guardrails"]
+    assert guardrails["ask_timeout"] == 86400
+    policies = guardrails["policies"]
     spawn = policies["spawn_bounds"]["function"]
     assert policies["spawn_bounds"]["type"] == "function"
     assert spawn["arguments"]["max_dispatches_per_turn"] == 3
-    assert "spawn_bounds" in spawn["path"]
+    assert spawn["path"] == "omnigent.inner.nessie.policies.spawn_bounds"
+    assert "sys_session_create" in spawn["arguments"]["dispatch_tools"]
+    blast = policies["blast_radius"]["function"]
+    assert blast["path"] == "omnigent.inner.nessie.policies.blast_radius"
+    guard = policies["headless_subagent_purpose_guard"]["function"]
+    assert guard["path"] == "omnigent.inner.nessie.policies.headless_subagent_purpose_guard"
+    assert set(guard["arguments"]["allowed_purposes"]) == {
+        "implement", "review", "explore", "search"
+    }
+    gate = policies["human_gate_implement"]
+    assert gate.get("on", gate.get(True)) == ["tool_call"]
+    assert gate["function"]["path"] == "omnigent.policies.builtins.cel.cel_policy"
+    assert "ASK" in gate["function"]["arguments"]["expression"]
     thrash = policies["detect_thrashing"]["function"]
     assert policies["detect_thrashing"]["type"] == "function"
     assert thrash["arguments"]["consecutive_threshold"] == 4
     assert thrash["arguments"]["action"] == "DENY"
-    assert "detect_thrashing" in thrash["path"]
+    assert thrash["path"] == "omnigent.policies.builtins.context.detect_thrashing"
 
 
 def test_bundled_skills_ship_real_copies():
@@ -183,6 +249,28 @@ def test_bundled_skills_ship_real_copies():
         (AGENT_SKILLS_DIR / "spec-planner" / "SKILL.md").read_bytes()
         == (CANONICAL_SKILL_DIR / "SKILL.md").read_bytes()
     )
+
+
+def test_root_skills_mirror_every_bundled_skill():
+    for name in REQUIRED_SKILLS:
+        root = REPO_ROOT / "skills" / name
+        bundled = AGENT_SKILLS_DIR / name
+        root_files = sorted(p.relative_to(root).as_posix() for p in root.rglob("*")
+                            if p.is_file() and "__pycache__" not in p.parts)
+        bundled_files = sorted(p.relative_to(bundled).as_posix() for p in bundled.rglob("*")
+                               if p.is_file() and "__pycache__" not in p.parts)
+        assert root_files and root_files == bundled_files, name
+        for rel in root_files:
+            assert (root / rel).read_bytes() == (bundled / rel).read_bytes(), "%s/%s" % (name, rel)
+
+
+def test_sync_skills_covers_every_required_skill():
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    try:
+        import sync_skills  # type: ignore[import-not-found]
+    finally:
+        sys.path.pop(0)
+    assert set(sync_skills.SKILL_NAMES) == set(REQUIRED_SKILLS)
 
 
 def test_sync_skills_check_passes():
@@ -210,8 +298,12 @@ def test_validator_accepts_project_scaffold_template(tmp_path):
 
 def test_prompt_mentions_protocols_and_gate():
     prompt = (AGENT_DIR / "PROMPT.md").read_text(encoding="utf-8")
-    for token in ("/spec-plan", "/fanout", "/cross-review", "APPROVE"):
+    for token in ("/spec-plan", "/fanout", "/cross-review", "APPROVE",
+                  "sys_session_get_info", "sys_session_send", "sys_read_inbox",
+                  "/goal", "depends_on", "validate_spec_dag.py"):
         assert token in prompt, "PROMPT.md must reference %r" % token
+    assert "You are tech-lead" in prompt, "PROMPT.md must establish tech-lead's identity"
+    assert "you are polly" not in prompt.lower(), "PROMPT.md must not keep polly's identity"
 
 
 def test_spec_planner_skill_mentions_validate_script():
