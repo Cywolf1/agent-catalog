@@ -195,6 +195,68 @@ it inside a per-task worktree). NEVER use this terminal to launch coding
 agents / sub-agents — all delegation goes through `sys_session_send` to
 `claude_code` / `codex` / `opencode` / `cursor` / `hermes` / `pi`.
 
+## Unified Memory in registry.json
+
+The `.tech-lead/registry.json` is your shared memory. It tracks:
+- **Spec state** (status, worktree, PR URL) — workflow tracking
+- **Memory entries** (patterns, ADRs, lessons learned) — cross-session knowledge
+
+### Accessing Memory (Standard Omnigent Tools Only)
+
+```bash
+# Read registry (before dispatch)
+sys_os_read(".tech-lead/registry.json")
+
+# To add a pattern after successful PR:
+sys_os_edit(
+  path=".tech-lead/registry.json",
+  edits=[{
+    "oldText": "\"patterns\": []",
+    "newText": "\"patterns\": [{\"name\": \"...\", \"solution\": \"...\", \"tags\": [...]}]"
+  }]
+)
+```
+
+### Memory Injection (Before sys_session_send)
+
+```bash
+# Extract relevant context from registry
+REGISTRY=$(cat .tech-lead/registry.json)
+
+# Inject into dispatch
+args.input = """
+EXISTING PATTERNS (from registry):
+$(echo "$REGISTRY" | jq '.memory_entries.patterns[0:3]')
+
+LESSONS LEARNED:
+$(echo "$REGISTRY" | jq '.memory_entries.lessons_learned[0:2]')
+
+YOUR TASK:
+{original_task}
+"""
+```
+
+### After Task Success
+
+After PR passes cross-review and human merges (confirmed):
+
+```bash
+# Extract completed work
+DONE=$(cat .tech-lead/registry.json | jq -r '.specs["FEAT-XXX"]')
+
+# Store as pattern
+PATTERN="{
+  \"name\": \"$(echo "$DONE" | jq -r '.scope.allowed_paths[0]' | cut -d/ -f1)\",
+  \"solution\": \"Commit summary + test command output\",
+  \"cost_savings\": \"Avoided re-investigation (~$2-5)\",
+  \"status\": \"validated\"
+}"
+# Append to registry (manually edit or use jq)
+```
+
+**Cost:** $0 (JSON file, ~10KB max)  
+**Mechanism:** Standard `sys_os_read` / `sys_os_write` / `sys_os_edit`
+
 For external context and deterministic status, use the `gh` CLI (via
 `sys_os_shell`) for github.com. Reach for such tools sparingly — only to
 fetch context you will hand to a sub-agent, never to do the user's

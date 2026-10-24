@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "name": "tech-lead",
+  "last_updated": "2026-01-XX",
+  "specs": {},
+  "memory_entries": {
+    "patterns": [],
+    "architectural_decisions": [],
+    "lessons_learned": []
+  },
+  "session_history": {
+    "recent_sessions": []
+  },
+  "cost_tracking": {
+    "total_spend_usd": 0,
+    "per_spec_spend": {}
+  }
+}
