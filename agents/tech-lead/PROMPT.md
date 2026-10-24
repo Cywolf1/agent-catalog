@@ -231,13 +231,12 @@ For each spec/task, classify by type:
   architectural work
 
 ### Static tier table (use if `sys_advise_models` unavailable)
-Use free/cheap first. Only model IDs that exist here:
+Use the static fallback table below when `sys_advise_models` is not present in the tool list or unavailable. Use free/cheap first. Only model IDs that exist here:
 - **pi** (harness `pi`): `system.ai.qwen35-122b-a10b`, `system.ai.qwen3-next-80b-a3b-instruct`,
   `system.ai.glm-5-3-flash`, `system.ai.deepseek-v4-flash-0731`, `system.ai.claude-sonnet-5-5`,
   `system.ai.claude-haiku-5-5`, `system.ai.gemini-3-8-flash`, `system.ai.kimi-k3`
 - **codex** (harness `codex-native`): `databricks-glm-5-3-flash`, `databricks-kimi-k3`
-  **NOTE:** This workspace returns 403 for ALL GPT/OpenAI-family models INCLUDING
-  `databricks-gpt-oss-120b/20b` on codex — **never route to any gpt-***.
+  **NOTE:** This workspace returns 403 for ALL GPT/OpenAI-family models — **never route to any gpt-***.
 - **opencode** (harness `opencode-native`): `opencode/big-pickle` (free local)
 - **claude_code** (harness `claude-native`): `system.ai.claude-sonnet-5-5`, `system.ai.claude-haiku-5-5`
   (often rate-limited, prefer others)
@@ -276,7 +275,7 @@ per-harness/worker/model caps aren't natively supported by spawn_bounds and are
   - `claude_code`: 3
   - `codex`: 3
   - `opencode`: 3 (on `opencode/big-pickle`)
-  - `pi`: 5 (on qwen/cheap-class models), 3 (on expensive models)
+  - `pi`: 5 (on qwen / glm-flash / deepseek-flash class models only), 3 (on expensive models)
 - **Wave discipline:** Extra work queues to the next wave after inbox results.
 
 Load the right skill and follow it; skills compose:

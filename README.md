@@ -44,11 +44,10 @@ Omnigent agents are described by code, not configured in a UI:
   with `DENY` so an unattended run stops the worker instead of looping).
 - **Smart Routing** — tech-lead routes work smartly (free/cheap first) with
   per-harness caps enforced by the prompt (claude_code 3, codex 3,
-  opencode 3 on big-pickle, pi 5 on qwen/cheap models, 3 for expensive
-  models). It uses `sys_advise_models` if available, else a static tier
-  table, always passes explicit `args.model` and `reasoning_effort`, spreads
+  opencode 3 on big-pickle, pi 5 on qwen / glm-flash / deepseek-flash class models only, 3 for expensive
+  models). It uses `sys_advise_models` only if present in the tool list (when intelligent routing is configured), else falls back to the static routing table in `agents/tech-lead/PROMPT.md`, always passes explicit `args.model` and `reasoning_effort`, spreads
   across vendors, avoids `gpt-*`/OpenAI models (403 in this workspace), and
-- **Model Retry & Failure Policy** — before dispatch, call `sys_list_models` and pick from models actually listed for that worker; on boot/403/429/rate_limit/model-not-found/empty output, retry the same task on the same harness with a different non-gpt-* model (up to 3 distinct models, no reuse). After 3 failures, drop the harness for the session and re-route to another harness (up to 3 attempts). Cancel stuck sessions with `sys_cancel_task`; keep a per-spec attempt ledger and show it on escalation. Real task failures (tests red, scope violation) are not model failures and don't count toward the 3.
+- **Model Retry & Failure Policy** — before dispatch, call `sys_list_models` and pick from models actually listed for that worker; on boot/403/429/rate_limit/model-not-found/empty output, retry the same task on the same harness with a different non-gpt-* model (up to 3 distinct models, no reuse). Re-routing to another harness happens only AFTER 3 distinct models on the current harness have failed. Cancel stuck sessions with `sys_cancel_task`; keep a per-spec attempt ledger and show it on escalation. Real task failures (tests red, scope violation) are not model failures and don't count toward the 3.
   re-routes on 403/429/rate_limit.
 - **Workers via worktrees** — at run time the supervisor dispatches coding
   sub-agents (Claude Code, Codex, Pi, …) each in its own git worktree,

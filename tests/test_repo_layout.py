@@ -244,6 +244,7 @@ def test_smart_routing_config():
     prompt = (AGENT_DIR / "PROMPT.md").read_text(encoding="utf-8")
     assert "Smart Routing" in prompt
     assert "sys_advise_models" in prompt
+    assert "tool list" in prompt  # conditional wording
     assert "args.model" in prompt
     assert "reasoning_effort" in prompt
     # per-harness caps mentioned
@@ -251,6 +252,9 @@ def test_smart_routing_config():
     assert "codex" in prompt and "3" in prompt
     assert "opencode" in prompt
     assert "pi" in prompt and "5" in prompt
+    # pi cap applies to qwen/glm-flash/deepseek-flash class
+    assert "qwen" in prompt or "glm-flash" in prompt or "deepseek-flash" in prompt
+    assert "gpt-oss" not in prompt.lower()
     # gpt forbidden
     assert "gpt-" in prompt or "OpenAI" in prompt
 
@@ -276,6 +280,9 @@ def test_readme_smart_routing():
     assert "5" in readme
     assert "smart routing" in readme.lower() or "Smart Routing" in readme
     assert "per-harness" in readme.lower()
+    # pi cap only for qwen/glm-flash/deepseek-flash class
+    assert "qwen" in readme.lower() or "glm-flash" in readme.lower() or "deepseek-flash" in readme.lower()
+    assert "gpt-oss" not in readme.lower()
 
 
 def test_model_retry_failure_policy():
