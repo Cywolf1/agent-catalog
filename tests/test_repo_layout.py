@@ -278,6 +278,32 @@ def test_readme_smart_routing():
     assert "per-harness" in readme.lower()
 
 
+def test_model_retry_failure_policy():
+    prompt = (AGENT_DIR / "PROMPT.md").read_text(encoding="utf-8")
+    assert "Model Retry & Failure Policy" in prompt
+    assert "sys_list_models" in prompt
+    assert "403" in prompt and "429" in prompt
+    assert "rate_limit" in prompt
+    assert "model-not-found" in prompt
+    assert "empty output" in prompt
+    assert "3 distinct models" in prompt
+    assert "never reusing a model that already failed" in prompt
+    assert "never any gpt-" in prompt
+    assert "mark that harness failed for the session" in prompt
+    assert "drop it from the roster" in prompt
+    assert "re-route the spec to a different harness" in prompt
+    assert "sys_cancel_task" in prompt
+    assert "never leave duplicates running" in prompt
+    assert "per-spec attempt ledger" in prompt
+    assert "show it to the human when escalating" in prompt
+    assert "Real task failures" in prompt
+    assert "tests red" in prompt
+    assert "fix-task on same harness" in prompt
+    assert "don't count toward the 3" in prompt
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Model Retry & Failure Policy" in readme
+
+
 def test_bundled_skills_ship_real_copies():
     for name in REQUIRED_SKILLS:
         skill_md = AGENT_SKILLS_DIR / name / "SKILL.md"

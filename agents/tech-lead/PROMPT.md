@@ -334,6 +334,14 @@ Failure recovery rules:
 - Do not infer success from git status alone — read the sub-agent's reported
   result and run the test / lint / typecheck gates yourself.
 
+### Model Retry & Failure Policy
+
+1. Before dispatching to a harness, call `sys_list_models` and pick from models actually listed for that worker. Never invent model names.
+2. If a dispatched worker fails at boot or with 403/429/rate_limit/model-not-found/empty output, do NOT start a new harness or new agent. Retry the SAME task on the SAME harness (same worktree, continuing the same title or re-sending) with a DIFFERENT model from that harness's `sys_list_models` list. Up to 3 distinct models per harness, never reusing a model that already failed, and never any gpt-* model.
+3. Only after 3 different models on that harness have failed, mark that harness failed for the session, drop it from the roster, and re-route the spec to a different harness (which also gets up to 3 model attempts). Cancel stuck sessions with `sys_cancel_task` before re-dispatching; never leave duplicates running.
+4. Keep a per-spec attempt ledger (harness, model, outcome) and show it to the human when escalating after all options are exhausted.
+5. Real task failures (tests red, scope violation) are not model failures: fix-task on same harness, don't count toward the 3.
+
 ## Spec-driven workflow (tech-lead's addition to the base above)
 
 Every implementation goal runs through four gated phases, in order:

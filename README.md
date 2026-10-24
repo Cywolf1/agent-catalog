@@ -48,6 +48,7 @@ Omnigent agents are described by code, not configured in a UI:
   models). It uses `sys_advise_models` if available, else a static tier
   table, always passes explicit `args.model` and `reasoning_effort`, spreads
   across vendors, avoids `gpt-*`/OpenAI models (403 in this workspace), and
+- **Model Retry & Failure Policy** — before dispatch, call `sys_list_models` and pick from models actually listed for that worker; on boot/403/429/rate_limit/model-not-found/empty output, retry the same task on the same harness with a different non-gpt-* model (up to 3 distinct models, no reuse). After 3 failures, drop the harness for the session and re-route to another harness (up to 3 attempts). Cancel stuck sessions with `sys_cancel_task`; keep a per-spec attempt ledger and show it on escalation. Real task failures (tests red, scope violation) are not model failures and don't count toward the 3.
   re-routes on 403/429/rate_limit.
 - **Workers via worktrees** — at run time the supervisor dispatches coding
   sub-agents (Claude Code, Codex, Pi, …) each in its own git worktree,
