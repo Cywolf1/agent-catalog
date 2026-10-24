@@ -311,6 +311,23 @@ def test_model_retry_failure_policy():
     assert "Model Retry & Failure Policy" in readme
 
 
+def test_post_pr_ci_merge_deploy_protocol():
+    prompt = (AGENT_DIR / "PROMPT.md").read_text(encoding="utf-8")
+    assert "Post-PR: CI, Merge, Deploy & Runtime Verification" in prompt
+    assert "gh pr checks" in prompt or "statusCheckRollup" in prompt
+    assert "gh pr view" in prompt
+    assert "never merge" in prompt.lower()
+    assert "PR merged?" in prompt
+    assert "gh run list" in prompt or "gh run watch" in prompt
+    assert "gh run view --log-failed" in prompt
+    assert "runtime logs" in prompt
+    assert "healthy" in prompt and "issues found" in prompt
+    # deploy fields may be in template/readme/prompt summary
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Post-PR: CI, Merge, Deploy & Runtime Verification" in readme
+    assert "deploy.check_command" in readme or "deploy.log_command" in readme
+
+
 def test_bundled_skills_ship_real_copies():
     for name in REQUIRED_SKILLS:
         skill_md = AGENT_SKILLS_DIR / name / "SKILL.md"

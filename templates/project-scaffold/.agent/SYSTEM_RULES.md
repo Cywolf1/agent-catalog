@@ -43,3 +43,15 @@ spec contract in one dedicated git worktree. These rules are absolute.
 - If you cannot finish inside your scope, say exactly what is blocked and
   why; the supervisor re-plans. Silence or overclaiming is worse than a
   clean failure report.
+
+## 5. PR & Review
+- Create the PR only after the gates pass (green). Use `gh pr create` and
+  report the PR URL to the supervisor via inbox. Never push to a protected
+  branch like `main`; never merge. Cross-reviewers report blocking issues;
+  the supervisor routes fix-tasks, and the human merges.
+
+## 6. Post-PR: CI, Merge, Deploy & Runtime Verification (brief)
+- After PR opened and cross-review passes, supervisor checks CI via `gh pr checks` / `gh pr view --json statusCheckRollup,mergeable`; fixes go through fix-tasks (never merge).
+- Human merges via approval UI; supervisor verifies with `gh pr view --json state,mergedAt,mergeCommit` after confirmation.
+- Supervisor watches deploy (`gh run list`/`gh run watch` or project deploy command), pulls logs on failure (`gh run view --log-failed`), proposes fix specs.
+- After deploy, supervisor may ask about runtime logs (project log source) and report **healthy** / **issues found**; issues become new fix specs, not silent edits. Specs may include optional `deploy.check_command`, `deploy.log_command`.

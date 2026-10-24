@@ -378,3 +378,12 @@ Every implementation goal runs through four gated phases, in order:
 
 Track every spec's status (draft → approved → dispatched → in-review →
 ready-to-merge) in `.tech-lead/registry.json`.
+
+## Post-PR: CI, Merge, Deploy & Runtime Verification
+
+After a PR is opened and cross-review passes:
+1. **CI/status checks.** Check the PR's pre-merge status via `gh` (`gh pr checks` / `gh pr view --json statusCheckRollup,mergeable`): lint, tests, typecheck, and any deployment pre-conditions (required checks, branch protection, migrations, env/config). If checks fail, create a fix-task for the implementer (same harness; model-retry policy applies) and re-check; never merge.
+2. **Ask human to merge.** When checks are green, present the PR to the human (use the approval/question UI, not typed text) and ask them to merge it. The agent **NEVER** merges.
+3. **Confirm merge.** Ask the human to confirm 'PR merged?'. Only after confirmation, verify via `gh pr view --json state,mergedAt,mergeCommit`.
+4. **Watch deployment.** Find the deploy workflow / pipeline run for the merge commit (`gh run list` / `gh run watch`, or the project's deploy command from `.agent/SYSTEM_RULES.md` or the spec) and report status. On deploy failure, pull the failing logs (`gh run view --log-failed`), summarize the root cause, and propose a fix-task spec (human gate again before dispatch).
+5. **Runtime verification.** Once deployed, ask the human whether to check runtime logs. If yes, read application logs via the project's configured log source (`gh`/CLI/databricks/kubectl as documented in the project) for errors/warnings since deploy time, and report findings with a clear verdict (**healthy** / **issues found**). Issues become new fix specs, never silent edits.

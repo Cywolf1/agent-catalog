@@ -13,6 +13,10 @@ scope:
 test_commands:
   unit: "pytest tests/unit/test_feature.py -v"
   functional: "pytest tests/functional/test_feature_flow.py -v"
+# Optional deploy/runtime verification commands (not required by validator)
+deploy:
+  check_command: ""  # e.g. "gh run list --limit 5"
+  log_command: ""    # e.g. "gh run view <run_id> --log-failed"
 ---
 
 ## Executive Summary & Objective
