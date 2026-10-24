@@ -4,6 +4,8 @@ description: Codex coding sub-agent — implements, cross-vendor reviews, or exp
 
 executor:
   type: omnigent
+  model: databricks-glm-5-3-flash
+  reasoning_effort: medium
   config:
     harness: codex-native
     # YOLO: headless workers can't answer approval prompts, so run Codex

@@ -214,7 +214,7 @@ def test_config_yaml_policies():
     policies = guardrails["policies"]
     spawn = policies["spawn_bounds"]["function"]
     assert policies["spawn_bounds"]["type"] == "function"
-    assert spawn["arguments"]["max_dispatches_per_turn"] == 3
+    assert spawn["arguments"]["max_dispatches_per_turn"] == 5
     assert spawn["path"] == "omnigent.inner.nessie.policies.spawn_bounds"
     assert "sys_session_create" in spawn["arguments"]["dispatch_tools"]
     blast = policies["blast_radius"]["function"]
@@ -233,6 +233,49 @@ def test_config_yaml_policies():
     assert thrash["arguments"]["consecutive_threshold"] == 4
     assert thrash["arguments"]["action"] == "DENY"
     assert thrash["path"] == "omnigent.policies.builtins.context.detect_thrashing"
+
+
+def test_smart_routing_config():
+    config = _load_config()
+    # spawn_bounds increased
+    spawn = config["guardrails"]["policies"]["spawn_bounds"]["function"]
+    assert spawn["arguments"]["max_dispatches_per_turn"] == 5
+    # prompt must mention smart routing
+    prompt = (AGENT_DIR / "PROMPT.md").read_text(encoding="utf-8")
+    assert "Smart Routing" in prompt
+    assert "sys_advise_models" in prompt
+    assert "args.model" in prompt
+    assert "reasoning_effort" in prompt
+    # per-harness caps mentioned
+    assert "claude_code" in prompt and "3" in prompt
+    assert "codex" in prompt and "3" in prompt
+    assert "opencode" in prompt
+    assert "pi" in prompt and "5" in prompt
+    # gpt forbidden
+    assert "gpt-" in prompt or "OpenAI" in prompt
+
+
+def test_worker_models_not_priciest():
+    # Check no worker defaults to opus/priciest
+    for name in WORKERS:
+        path = AGENT_DIR / "agents" / name / "config.yaml"
+        worker = _load_yaml(path)
+        exec_cfg = worker.get("executor", {})
+        model = exec_cfg.get("model") or exec_cfg.get("config", {}).get("model") or ""
+        # Should have explicit model set
+        assert model, f"{name} should have a model set"
+        # Should not be opus
+        assert "opus" not in str(model).lower(), f"{name} should not default to opus"
+        # Check reasoning_effort
+        reasoning = exec_cfg.get("reasoning_effort") or exec_cfg.get("config", {}).get("reasoning_effort")
+        assert reasoning is not None, f"{name} should have reasoning_effort set"
+
+
+def test_readme_smart_routing():
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "5" in readme
+    assert "smart routing" in readme.lower() or "Smart Routing" in readme
+    assert "per-harness" in readme.lower()
 
 
 def test_bundled_skills_ship_real_copies():

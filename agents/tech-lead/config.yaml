@@ -115,8 +115,10 @@ guardrails:
       function:
         path: omnigent.inner.nessie.policies.spawn_bounds
         arguments:
-          # At most 3 dispatches per turn; larger plans run in waves.
-          max_dispatches_per_turn: 3
+          # At most 5 dispatches per turn; larger plans run in waves.
+          # Note: per-harness/worker/model caps aren't natively supported by spawn_bounds;
+          # they are enforced by the prompt (Smart Routing).
+          max_dispatches_per_turn: 5
           # sys_session_create counts too: with spawn: true tech-lead can
           # launch self-defined children, and an uncounted create would
           # bypass the per-turn fan-out cap.

@@ -38,10 +38,17 @@ Omnigent agents are described by code, not configured in a UI:
   repo-root `skills/spec-planner/` and ships a real copy inside the agent
   bundle (see [Skills bundling](#skills-bundling--why-there-are-two-copies)).
 - **Policies** — `guardrails.policies` in the agent config wires real
-  Omnigent policy factories: `spawn_bounds` (at most **3** worker
+  Omnigent policy factories: `spawn_bounds` (at most **5** worker
   dispatches per supervisor turn) and `detect_thrashing` (**4**
   consecutive erroring tool results, e.g. repeated test failures, escalate
   with `DENY` so an unattended run stops the worker instead of looping).
+- **Smart Routing** — tech-lead routes work smartly (free/cheap first) with
+  per-harness caps enforced by the prompt (claude_code 3, codex 3,
+  opencode 3 on big-pickle, pi 5 on qwen/cheap models, 3 for expensive
+  models). It uses `sys_advise_models` if available, else a static tier
+  table, always passes explicit `args.model` and `reasoning_effort`, spreads
+  across vendors, avoids `gpt-*`/OpenAI models (403 in this workspace), and
+  re-routes on 403/429/rate_limit.
 - **Workers via worktrees** — at run time the supervisor dispatches coding
   sub-agents (Claude Code, Codex, Pi, …) each in its own git worktree,
   driven by the bundled `fanout` / `cross-review` / `investigate` skills.
@@ -124,7 +131,7 @@ Commit those files to your repo so every worktree starts with them.
 4. **Worktree fan-out.** The supervisor loads `fanout`, creates one git
    worktree per parallel-safe spec (`git worktree add .worktrees/<task>`
    -b tech-lead/<task>`), and dispatches one coding sub-agent per spec via
-   `sys_session_send` — capped at 3 dispatches per turn by the
+   `sys_session_send` — capped at 5 dispatches per turn by the
    `spawn_bounds` policy; bigger plans run in waves. Each worker receives
    ONLY the path to its `.specs/feat-*.md` contract, authors unit AND
    functional tests for every Gherkin scenario, confirms they fail (RED),

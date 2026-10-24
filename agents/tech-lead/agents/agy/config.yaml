@@ -10,6 +10,8 @@ description: Google Antigravity CLI coding sub-agent — implements, cross-vendo
 # account auth via ~/.gemini) and does not run Claude/GPT-family models.
 executor:
   type: omnigent
+  model: system.ai.glm-5-3-flash
+  reasoning_effort: medium
   config:
     harness: antigravity-native
 

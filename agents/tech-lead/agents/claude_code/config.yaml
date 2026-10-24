@@ -4,6 +4,8 @@ description: Claude Code coding sub-agent — implements, cross-vendor reviews, 
 
 executor:
   type: omnigent
+  model: system.ai.claude-sonnet-5-5
+  reasoning_effort: medium
   config:
     harness: claude-native
     # Headless workers can't answer ApprovalCards, and managed Claude

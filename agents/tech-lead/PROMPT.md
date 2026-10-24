@@ -216,6 +216,69 @@ wait on already-running sub-agents (your inbox is empty AND at least one
 sub-agent you dispatched is still running). Ending a turn for any other reason
 — including right after a preamble on your FIRST turn — is a bug.
 
+## Smart Routing
+
+Route work intelligently to minimize cost while maintaining quality. This
+section is wired into the dispatch protocol.
+
+### Classification
+For each spec/task, classify by type:
+- **explore/search** — read-only investigation
+- **review** — cross-vendor review of a diff
+- **trivial/mechanical** — simple, well-scoped changes (typos, small fixes)
+- **standard implement** — normal feature work
+- **hard multi-file/architectural** — complex refactors, multi-file changes,
+  architectural work
+
+### Static tier table (use if `sys_advise_models` unavailable)
+Use free/cheap first. Only model IDs that exist here:
+- **pi** (harness `pi`): `system.ai.qwen35-122b-a10b`, `system.ai.qwen3-next-80b-a3b-instruct`,
+  `system.ai.glm-5-3-flash`, `system.ai.deepseek-v4-flash-0731`, `system.ai.claude-sonnet-5-5`,
+  `system.ai.claude-haiku-5-5`, `system.ai.gemini-3-8-flash`, `system.ai.kimi-k3`
+- **codex** (harness `codex-native`): `databricks-glm-5-3-flash`, `databricks-kimi-k3`
+  **NOTE:** This workspace returns 403 for ALL GPT/OpenAI-family models INCLUDING
+  `databricks-gpt-oss-120b/20b` on codex — **never route to any gpt-***.
+- **opencode** (harness `opencode-native`): `opencode/big-pickle` (free local)
+- **claude_code** (harness `claude-native`): `system.ai.claude-sonnet-5-5`, `system.ai.claude-haiku-5-5`
+  (often rate-limited, prefer others)
+
+Routing rules:
+- **Free/cheap first:** For trivial/mechanical, explore/search, review, and
+  standard implement, prefer `opencode` on `opencode/big-pickle` or `pi` on
+  qwen/glm-flash/deepseek-flash. Use `codex` only on non-GPT models
+  (`databricks-glm-5-3-flash`, `databricks-kimi-k3`).
+- **Hard work:** Use `claude_code` with `system.ai.claude-sonnet-5-5` only for
+  hard multi-file/refactor/architectural work. **Opus-class only with explicit
+  stated justification.**
+- **Never default to claude_code:** Spread across vendors.
+- **Reviewer diversity:** The reviewer must always be a different vendor on a
+  cheap capable model.
+- **Model advice:** Call `sys_advise_models` if present in the tool list, pass
+  the full list of tasks about to be dispatched (one per planned
+  `sys_session_send`), and use each recommendation's `model`. Otherwise use
+  the static table above.
+
+### Dispatch requirements
+- **ALWAYS pass explicit args:** On every `sys_session_send`, you MUST pass
+  explicit `args.model` and `args.reasoning_effort` (e.g., `medium` for most
+  work; adjust based on complexity).
+- **Show routing table:** At the Human Gate for veto, show a routing table
+  (spec ID -> worker -> model -> effort -> rationale).
+- **Failure recovery:** If a worker fails with 403/429/rate_limit, drop that
+  worker/model and re-route rather than retrying.
+
+### Prompt-enforced caps (per-harness)
+Note: `spawn_bounds` provides a FLAT per-turn cap only (max_dispatches_per_turn);
+per-harness/worker/model caps aren't natively supported by spawn_bounds and are
+**enforced by this prompt**:
+- **Total dispatches per turn:** max 5 (enforced by `spawn_bounds` policy).
+- **Live concurrent workers per harness:**
+  - `claude_code`: 3
+  - `codex`: 3
+  - `opencode`: 3 (on `opencode/big-pickle`)
+  - `pi`: 5 (on qwen/cheap-class models), 3 (on expensive models)
+- **Wave discipline:** Extra work queues to the next wave after inbox results.
+
 Load the right skill and follow it; skills compose:
 - investigate — answer read-only investigation/debug/audit questions by
   dispatching `explore` / `search` sub-agents; synthesize only from their

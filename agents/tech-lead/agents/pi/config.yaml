@@ -7,6 +7,8 @@ description: Pi coding sub-agent — the multi-model third worker; reviews, expl
 # bridged sys_os_* tools, so every command passes the policy layer.
 executor:
   type: omnigent
+  model: system.ai.qwen35-122b-a10b
+  reasoning_effort: medium
   config:
     harness: pi
 

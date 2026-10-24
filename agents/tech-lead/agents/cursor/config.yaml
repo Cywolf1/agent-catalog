@@ -11,10 +11,8 @@ description: Cursor coding sub-agent — implements, cross-vendor reviews, or ex
 executor:
   type: omnigent
   # Faster default for tech-lead Cursor workers; override per-session with ``/model``.
-  # Use the base id from Cursor's model list / SDK (``grok-4.5``). The compound
-  # ``cursor-grok-4.5-high`` also works on cursor-agent, but the SDK catalog
-  # exposes ``grok-4.5``.
-  model: grok-4.5
+  model: system.ai.deepseek-v4-flash-0731
+  reasoning_effort: medium
   config:
     harness: cursor-native
     # YOLO: headless workers can't answer approval prompts, so run

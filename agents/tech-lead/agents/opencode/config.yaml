@@ -9,6 +9,8 @@ description: OpenCode coding sub-agent — implements, cross-vendor reviews, or 
 # policies apply), so risky actions are gated rather than auto-bypassed.
 executor:
   type: omnigent
+  model: opencode/big-pickle
+  reasoning_effort: medium
   config:
     harness: opencode-native
 

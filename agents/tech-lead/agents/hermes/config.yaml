@@ -8,6 +8,8 @@ description: Hermes Agent coding sub-agent — implements, cross-vendor reviews,
 # UI, so risky actions surface as approval cards rather than being auto-bypassed.
 executor:
   type: omnigent
+  model: system.ai.qwen3-next-80b-a3b-instruct
+  reasoning_effort: medium
   config:
     harness: hermes-native
 
